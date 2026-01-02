@@ -7,7 +7,7 @@ import schedule
 from dotenv import load_dotenv
 from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
-from switchbot import Switchbot
+from app.switchbot import Switchbot
 
 # Logging
 formatter = "[%(levelname)-8s] %(asctime)s %(funcName)s %(message)s"
@@ -50,7 +50,8 @@ def task():
     bot = Switchbot(ACCESS_TOKEN, SECRET)
 
     with open("device_list.json", "r") as f:
-        device_list = json.load(f)
+        data = json.load(f)
+        device_list = data.get("body", {}).get("deviceList", [])
 
     for d in device_list:
         device_type = d.get("deviceType")
