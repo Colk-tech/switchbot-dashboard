@@ -1,27 +1,20 @@
-[tool.poetry]
+[project]
 name = "switchbot-dashboard"
 version = "0.1.0"
 description = "Dashboard for Switchbot using InfluxDB and Grafana"
-authors = ["Your Name <you@example.com>"]
-license = "MIT"
 readme = "README.md"
-packages = [{include = "src"}]
+requires-python = ">=3.11"
+dependencies = [
+    "influxdb-client>=1.49.0",
+    "python-dotenv>=1.2.1",
+    "requests>=2.32.5",
+    "schedule>=1.2.2",
+]
 
-[tool.poetry.dependencies]
-python = "^3.11"
-requests = "^2.28.2"
-python-dotenv = "^1.0.0"
-influxdb-client = "^1.36.1"
-schedule = "^1.1.0"
-
-[tool.poetry.group.dev.dependencies]
-flake8 = "^6.0.0"
-mypy = "^0.991"
-black = "^22.12.0"
-isort = "^5.11.4"
-pytest = "^7.2.0"
-types-requests = "^2.28.11.15"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "ruff>=0.14.10",
+    "ty>=0.0.8",
+    "types-requests>=2.32.4.20250913",
+]

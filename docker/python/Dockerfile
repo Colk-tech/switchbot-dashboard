@@ -1,0 +1,158 @@
+# Copied from
+# https://github.com/Colk-tech/colk-uv-distroless-python/blob/ceb40255c6c4b8abefd2e9fc8e5d64d3b30711b5/docker/python/Dockerfile
+# and tweaked!
+
+# Python version to use (e.g., 3.11, 3.12, 3.13, 3.14)
+ARG PYTHON_VERSION=3.14
+
+# uv version - uses distroless uv image with {major}.{minor} format
+# This automatically uses the latest patch version within the specified minor version
+# See: https://docs.astral.sh/uv/guides/integration/docker/
+ARG UV_VERSION=0.7
+
+ARG PYTHON_BIN_PATH=/opt/python
+ARG VENV_DIR=/opt/venv
+ARG APP_DIR=/opt/app
+
+# =================================================================
+# Source stage for uv binary - uses distroless uv image for minimal size
+# Ensures consistent version across all stages
+FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv_source
+
+# =================================================================
+# Base builder: installs Python, creates venv, installs production dependencies
+# NOTE: Source code is NOT copied here to maximize cache efficiency
+# Uses debian-based uv image for build tools required during dependency installation
+FROM ghcr.io/astral-sh/uv:${UV_VERSION}-bookworm-slim AS base_builder
+
+# Inherit global ARGs
+ARG PYTHON_VERSION
+ARG PYTHON_BIN_PATH
+ARG VENV_DIR
+ARG APP_DIR
+
+# Configure uv for distroless compatibility
+# - UV_COMPILE_BYTECODE: Pre-compile .pyc files for faster startup
+# - UV_LINK_MODE: Use copy instead of hardlinks (required for cross-stage copying)
+# - UV_CACHE_DIR: Explicit cache directory for --mount=type=cache
+# - UV_PYTHON_INSTALL_DIR: Where uv installs Python interpreters
+# - UV_PYTHON_PREFERENCE: Only use uv-managed Python, never system Python
+# - UV_PROJECT_ENVIRONMENT: Target directory for the virtual environment
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_CACHE_DIR=/root/.cache/uv \
+    UV_PYTHON_INSTALL_DIR=${PYTHON_BIN_PATH} \
+    UV_PYTHON_PREFERENCE=only-managed \
+    UV_PROJECT_ENVIRONMENT=${VENV_DIR}
+
+# Install Python and create virtual environment
+# By default, uv venv does not seed pip/setuptools (--seed adds them, which we don't need)
+RUN uv python install ${PYTHON_VERSION} && \
+    uv venv ${VENV_DIR}
+
+WORKDIR ${APP_DIR}
+
+# Install production dependencies only
+# Source code is intentionally NOT copied here - it will be copied in final stages
+# This ensures dependency cache is preserved even when source code changes
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --frozen --no-install-project --no-dev --no-editable
+
+# =================================================================
+# Dev builder: adds dev dependencies on top of base_builder
+# NOTE: Source code is NOT copied here to maximize cache efficiency
+FROM base_builder AS dev_builder
+
+# Install dev dependencies (includes all dependencies from base_builder)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --frozen --no-install-project --dev --no-editable
+
+# =================================================================
+# Developer stage runs as root intentionally to allow:
+# - Installing additional packages with apt (e.g., debugging tools, editors)
+# - Modifying system configurations for development purposes
+# - Running development servers that may need privileged ports
+# For production workloads, use the 'runner' stage which runs as nonroot.
+FROM ubuntu:24.04 AS developer
+
+# Inherit global ARGs
+ARG PYTHON_BIN_PATH
+ARG VENV_DIR
+ARG APP_DIR
+
+ENV UV_PROJECT_ENVIRONMENT=${VENV_DIR} \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONFAULTHANDLER=1
+
+# Copy uv binary from the dedicated source stage for version consistency
+COPY --from=uv_source /uv /uvx /bin/
+
+# Copy Python and virtual environment from builder
+COPY --from=dev_builder ${PYTHON_BIN_PATH} ${PYTHON_BIN_PATH}
+COPY --from=dev_builder ${VENV_DIR} ${VENV_DIR}
+
+# Copy application source code directly (not from builder)
+COPY ./ ${APP_DIR}
+
+ENV PATH="${VENV_DIR}/bin:$PATH"
+
+WORKDIR ${APP_DIR}
+
+# Default command for development - override with your preferred shell or command
+CMD ["/bin/sleep", "infinity"]
+
+# =================================================================
+# Python requires glibc, so we use cc-debian12 instead of static.
+FROM gcr.io/distroless/cc-debian12:nonroot AS tester
+
+# Inherit global ARGs
+ARG PYTHON_BIN_PATH
+ARG VENV_DIR
+ARG APP_DIR
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONFAULTHANDLER=1
+
+# Copy uv binary from the dedicated source stage for version consistency
+COPY --from=uv_source /uv /uvx /bin/
+
+# Copy Python and virtual environment from builder
+COPY --from=dev_builder --chown=nonroot:nonroot ${PYTHON_BIN_PATH} ${PYTHON_BIN_PATH}
+COPY --from=dev_builder --chown=nonroot:nonroot ${VENV_DIR} ${VENV_DIR}
+
+# Copy application source code directly (not from builder) with proper ownership
+COPY --chown=nonroot:nonroot ./ ${APP_DIR}
+
+ENV PATH="${VENV_DIR}/bin:$PATH"
+
+WORKDIR ${APP_DIR}
+
+# =================================================================
+# Python requires glibc, so we use cc-debian12 instead of static.
+FROM gcr.io/distroless/cc-debian12:nonroot AS runner
+
+# Inherit global ARGs
+ARG PYTHON_BIN_PATH
+ARG VENV_DIR
+ARG APP_DIR
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONFAULTHANDLER=1
+
+# Copy Python and virtual environment from builder
+COPY --from=base_builder --chown=nonroot:nonroot ${PYTHON_BIN_PATH} ${PYTHON_BIN_PATH}
+COPY --from=base_builder --chown=nonroot:nonroot ${VENV_DIR} ${VENV_DIR}
+
+# Copy application source code directly (not from builder) with proper ownership
+COPY --chown=nonroot:nonroot ./ ${APP_DIR}
+
+ENV PATH="${VENV_DIR}/bin:$PATH"
+
+WORKDIR ${APP_DIR}
