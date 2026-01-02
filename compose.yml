@@ -5,7 +5,7 @@ services:
   python:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: ./docker/python/Dockerfile
     tty: true
 
   influxdb:
