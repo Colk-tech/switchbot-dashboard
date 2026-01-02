@@ -4,6 +4,7 @@ services:
       context: .
       dockerfile: ./docker/python/Dockerfile
     tty: true
+    command: ["python", "main.py"]
 
   influxdb:
     image: influxdb:2.6.1
