@@ -50,7 +50,8 @@ def task():
     bot = Switchbot(ACCESS_TOKEN, SECRET)
 
     with open("device_list.json", "r") as f:
-        device_list = json.load(f)
+        data = json.load(f)
+        device_list = data.get("body", {}).get("deviceList", [])
 
     for d in device_list:
         device_type = d.get("deviceType")
