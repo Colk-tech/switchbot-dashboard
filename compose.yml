@@ -2,9 +2,8 @@
 
 services:
   python:
-    build:
-      context: .
-      dockerfile: ./docker/python/Dockerfile
+    # Build with: ./scripts/build.sh (required for Linux with AppArmor)
+    # See: https://github.com/dani-garcia/vaultwarden/discussions/3800
     tty: true
     command: ["python", "main.py"]
 
