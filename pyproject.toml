@@ -1,7 +1,7 @@
 [project]
 name = "switchbot-dashboard"
 version = "0.1.0"
-description = "Add your description here"
+description = "Dashboard for Switchbot using InfluxDB and Grafana"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = []
