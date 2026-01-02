@@ -7,7 +7,7 @@ import schedule
 from dotenv import load_dotenv
 from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
-from switchbot import Switchbot
+from app.switchbot import Switchbot
 
 # Logging
 formatter = "[%(levelname)-8s] %(asctime)s %(funcName)s %(message)s"
